@@ -120,7 +120,7 @@
 <span class="k">class</span> <span class="nc">CreateProducts</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Migration</span>
   <span class="k">def</span> <span class="nf">change</span>
     <span class="n">create_table</span> <span class="ss">:products</span> <span class="k">do</span> <span class="o">|</span><span class="n">t</span><span class="o">|</span>
-      <span class="n">t</span><span class="p">.</span><span class="nf">string</span>  <span class="ss">:hashed_id</span><span class="p">,</span>    <span class="ss">index: </span><span class="kp">true</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">string</span>  <span class="ss">:public_id</span><span class="p">,</span>    <span class="ss">index: </span><span class="kp">true</span>
       <span class="n">t</span><span class="p">.</span><span class="nf">string</span>  <span class="ss">:name</span><span class="p">,</span>         <span class="ss">index: </span><span class="kp">true</span><span class="p">,</span> <span class="ss">null: </span><span class="kp">false</span>
       <span class="n">t</span><span class="p">.</span><span class="nf">text</span>    <span class="ss">:description</span><span class="p">,</span>  <span class="ss">null: </span><span class="kp">false</span>
       <span class="n">t</span><span class="p">.</span><span class="nf">float</span>   <span class="ss">:price</span><span class="p">,</span>        <span class="ss">index: </span><span class="kp">true</span><span class="p">,</span> <span class="ss">null: </span><span class="kp">false</span>
@@ -135,21 +135,21 @@
 
 <p>Run <code>rake db:migrate</code> to migrate the database.</p>
 
-<p>You may be wondering why we added a field for <code>:hashed_id</code>. We want to use pseudo-random string identifiers rather than sequential integer identifiers so that outsiders will not be able to guess how many objects of each type exists in our system, nor will they be able to randomly guess identifiers with much success.</p>
+<p>You may be wondering why we added a field for <code>:public_id</code>. We want to use pseudo-random string identifiers rather than sequential integer identifiers so that outsiders will not be able to guess how many objects of each type exists in our system, nor will they be able to randomly guess identifiers with much success.</p>
 
-<p>The best way to generate this <code>:hashed_id</code> is with the <code>bson</code> gem and an <code>ActiveSupport::Concern</code>. Concerns are a great way to organize code to be shared among multiple <code>models</code>. Create the following file:</p>
+<p>The best way to generate this <code>:public_id</code> is with the <code>bson</code> gem and an <code>ActiveSupport::Concern</code>. Concerns are a great way to organize code to be shared among multiple <code>models</code>. Create the following file:</p>
 <pre class="highlight ruby"><code><span class="c1"># app/models/concerns/hashed.rb</span>
 <span class="nb">require</span> <span class="s1">'bson'</span>
 
-<span class="k">module</span> <span class="nn">Hashed</span>
+<span class="k">module</span> <span class="nn">Public</span>
   <span class="kp">extend</span> <span class="no">ActiveSupport</span><span class="o">::</span><span class="no">Concern</span>
 
   <span class="n">included</span> <span class="k">do</span>
-    <span class="n">before_create</span> <span class="ss">:create_hashed_id</span>
+    <span class="n">before_create</span> <span class="ss">:create_public_id</span>
   <span class="k">end</span>
 
-  <span class="k">def</span> <span class="nf">create_hashed_id</span>
-    <span class="nb">self</span><span class="p">.</span><span class="nf">hashed_id</span> <span class="o">=</span> <span class="p">(</span><span class="no">BSON</span><span class="o">::</span><span class="no">ObjectId</span><span class="p">.</span><span class="nf">new</span><span class="p">).</span><span class="nf">to_s</span>
+  <span class="k">def</span> <span class="nf">create_public_id</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">public_id</span> <span class="o">=</span> <span class="p">(</span><span class="no">BSON</span><span class="o">::</span><span class="no">ObjectId</span><span class="p">.</span><span class="nf">new</span><span class="p">).</span><span class="nf">to_s</span>
   <span class="k">end</span>
 <span class="k">end</span>
 </code></pre>
@@ -157,20 +157,20 @@
 <p>Now, we can include our concern in our <code>Product</code> model:</p>
 <pre class="highlight ruby"><code><span class="c1"># app/models/product.rb</span>
 <span class="k">class</span> <span class="nc">Product</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
-  <span class="kp">include</span> <span class="no">Hashed</span>
+  <span class="kp">include</span> <span class="no">Public</span>
 <span class="k">end</span>
 </code></pre>
 
-<p>Now when <code>Products</code> are created, a <code>:hashed_id</code> will be generated and set for us.</p>
+<p>Now when <code>Products</code> are created, a <code>:public_id</code> will be generated and set for us.</p>
 
 <p>Fire up the Rails console to test it out:</p>
 <pre class="highlight shell"><code><span class="gp">$ </span>rails console
 2.2.0 :001 &gt; Product.create<span class="o">(</span>name: <span class="s2">"Lincoln Logs"</span>, description: <span class="s2">"Lincoln Logs rock!"</span>, price: 19.99<span class="o">)</span>
    <span class="o">(</span>0.1ms<span class="o">)</span>  begin transaction
-  SQL <span class="o">(</span>0.7ms<span class="o">)</span>  INSERT INTO <span class="s2">"products"</span> <span class="o">(</span><span class="s2">"created_at"</span>, <span class="s2">"description"</span>, <span class="s2">"hashed_id"</span>, <span class="s2">"name"</span>, <span class="s2">"price"</span>, <span class="s2">"updated_at"</span><span class="o">)</span> VALUES <span class="o">(</span>?, ?, ?, ?, ?, ?<span class="o">)</span>  <span class="o">[[</span><span class="s2">"created_at"</span>, <span class="s2">"2015-02-24 03:21:58.898486"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"description"</span>, <span class="s2">"Lincoln Logs rock!"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"hashed_id"</span>, <span class="s2">"54ebee56434a4d3414000000"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"name"</span>, <span class="s2">"Lincoln Logs"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"price"</span>, 19.99], <span class="o">[</span><span class="s2">"updated_at"</span>, <span class="s2">"2015-02-24 03:21:58.898486"</span><span class="o">]]</span>
+  SQL <span class="o">(</span>0.7ms<span class="o">)</span>  INSERT INTO <span class="s2">"products"</span> <span class="o">(</span><span class="s2">"created_at"</span>, <span class="s2">"description"</span>, <span class="s2">"public_id"</span>, <span class="s2">"name"</span>, <span class="s2">"price"</span>, <span class="s2">"updated_at"</span><span class="o">)</span> VALUES <span class="o">(</span>?, ?, ?, ?, ?, ?<span class="o">)</span>  <span class="o">[[</span><span class="s2">"created_at"</span>, <span class="s2">"2015-02-24 03:21:58.898486"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"description"</span>, <span class="s2">"Lincoln Logs rock!"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"public_id"</span>, <span class="s2">"54ebee56434a4d3414000000"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"name"</span>, <span class="s2">"Lincoln Logs"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"price"</span>, 19.99], <span class="o">[</span><span class="s2">"updated_at"</span>, <span class="s2">"2015-02-24 03:21:58.898486"</span><span class="o">]]</span>
    <span class="o">(</span>2.8ms<span class="o">)</span>  commit transaction
- <span class="o">=</span>&gt; <span class="c">#&lt;Product id: 1, hashed_id: "54ebee56434a4d3414000000", name: "Lincoln Logs", description: "Lincoln Logs rock!", price: 19.99, discontinued: false, deleted: false, created_at: "2015-02-24 03:21:58", updated_at: "2015-02-24 03:21:58"&gt; </span>
-2.2.0 :002 &gt; Product.first.hashed_id
+ <span class="o">=</span>&gt; <span class="c">#&lt;Product id: 1, public_id: "54ebee56434a4d3414000000", name: "Lincoln Logs", description: "Lincoln Logs rock!", price: 19.99, discontinued: false, deleted: false, created_at: "2015-02-24 03:21:58", updated_at: "2015-02-24 03:21:58"&gt; </span>
+2.2.0 :002 &gt; Product.first.public_id
   Product Load <span class="o">(</span>0.5ms<span class="o">)</span>  SELECT  <span class="s2">"products"</span>.<span class="k">*</span> FROM <span class="s2">"products"</span>   ORDER BY <span class="s2">"products"</span>.<span class="s2">"id"</span> ASC LIMIT 1
  <span class="o">=</span>&gt; <span class="s2">"54ebee56434a4d3414000000"</span> 
 </code></pre>
@@ -261,7 +261,7 @@
 
     <span class="c1"># Finds the desired Resource instance by :id</span>
     <span class="k">def</span> <span class="nf">set_resource</span>
-      <span class="n">resource</span><span class="p">.</span><span class="nf">find_by_hashed_id</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="ss">:id</span><span class="p">])</span>
+      <span class="n">resource</span><span class="p">.</span><span class="nf">find_by_public_id</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="ss">:id</span><span class="p">])</span>
     <span class="k">end</span>
 
     <span class="k">def</span> <span class="nf">resource_params</span>
@@ -330,7 +330,7 @@
 
 <p>The partial:</p>
 <pre class="highlight ruby"><code><span class="c1"># app/views/api/v1/products/_product.json.jbuilder</span>
-<span class="n">json</span><span class="p">.</span><span class="nf">id</span> <span class="n">product</span><span class="p">.</span><span class="nf">hashed_id</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">id</span> <span class="n">product</span><span class="p">.</span><span class="nf">public_id</span>
 <span class="n">json</span><span class="p">.</span><span class="nf">extract!</span> <span class="n">product</span><span class="p">,</span> <span class="ss">:name</span><span class="p">,</span> <span class="ss">:description</span><span class="p">,</span> <span class="ss">:price</span>
 <span class="n">json</span><span class="p">.</span><span class="nf">created_at</span> <span class="n">product</span><span class="p">.</span><span class="nf">created_at</span><span class="p">.</span><span class="nf">utc</span><span class="p">.</span><span class="nf">to_i</span> <span class="k">unless</span> <span class="n">product</span><span class="p">.</span><span class="nf">created_at</span><span class="p">.</span><span class="nf">nil?</span>
 <span class="n">json</span><span class="p">.</span><span class="nf">created_at</span> <span class="n">product</span><span class="p">.</span><span class="nf">updated_at</span><span class="p">.</span><span class="nf">utc</span><span class="p">.</span><span class="nf">to_i</span> <span class="k">unless</span> <span class="n">product</span><span class="p">.</span><span class="nf">updated_at</span><span class="p">.</span><span class="nf">nil?</span>
@@ -339,7 +339,7 @@
 
 <p>The <code>errors/not_found</code> view:</p>
 <pre class="highlight ruby"><code><span class="c1"># app/views/errors/not_found.json.jbuilder</span>
-<span class="n">json</span><span class="p">.</span><span class="nf">message</span> <span class="s2">"</span><span class="si">#{</span><span class="k">class</span><span class="p">.</span><span class="nf">to_s</span><span class="si">}</span><span class="s2"> with id </span><span class="si">#{</span><span class="n">hashed_id</span><span class="si">}</span><span class="s2"> could not be found."</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">message</span> <span class="s2">"</span><span class="si">#{</span><span class="k">class</span><span class="p">.</span><span class="nf">to_s</span><span class="si">}</span><span class="s2"> with id </span><span class="si">#{</span><span class="n">public_id</span><span class="si">}</span><span class="s2"> could not be found."</span>
 </code></pre>
 
 <p>The <code>errors/invalid_parameters</code> view:</p>
