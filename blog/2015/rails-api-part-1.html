@@ -1,0 +1,380 @@
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- Always force latest IE rendering engine or request Chrome Frame -->
+    <meta content="IE=edge,chrome=1" http-equiv="X-UA-Compatible" />
+    <!-- Use title if it's in the page YAML frontmatter --><title>Building a simple Rails API (Part 1)</title><link href="/stylesheets/normalize.css" rel="stylesheet" type="text/css" /><link href="/stylesheets/all.css" rel="stylesheet" type="text/css" /><link href="/stylesheets/code.css" rel="stylesheet" type="text/css" /><script src="/javascripts/all.js" type="text/javascript"></script>
+    <link href="http://fonts.googleapis.com/css?family=Oxygen:400,300,700" rel="stylesheet" type="text/css" />
+  </head>
+  <body class="blog blog_2015 blog_2015_rails-api-part-1">
+    <div id="main">
+      <nav>
+        <ul>
+          <li>
+            <a class="blog-title" href="/">Raw Thought</a>
+          </li>
+        </ul>
+      </nav><h1>Building a simple Rails API (Part 1)</h1>
+
+<p>I have found Rails to be fantastic for creating APIs, and today I would like to walk through creating a simple Create Read Update and Delete (CRUD) API. I will not cover RSpec or TDD of Rails applications, Michael Hartl&rsquo;s <a href="https://www.railstutorial.org/book">Rails Tutorial</a> does a fantastic job of that.</p>
+
+<h2>rails-api</h2>
+
+<hr>
+
+<p>The <code>rails-api</code> gem strips away most of the <code>ActionController</code> modules that provide functionality primarily used in browser applications, and configures the Rails generators to skip generating views, helpers, and assets when you generate a new resource.</p>
+
+<p>Install the gem:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>gem install rails-api
+</code></pre>
+
+<p>Generate a new <code>rails-api</code> application:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>rails-api new crud_example
+</code></pre>
+
+<p>Notice that this makes <code>ApplicationController</code> inherit from <code>ActionController::API</code> rather than <code>ActionController::Base</code>.</p>
+
+<h2>Basic Configuration</h2>
+
+<hr>
+
+<p>Now that we have our application created, we need to do some basic configuration for our API.</p>
+
+<p>Open up the <code>Gemfile</code> in your favorite editor:</p>
+<pre class="highlight ruby"><code><span class="c1"># Gemfile.rb</span>
+<span class="n">source</span> <span class="s1">'https://rubygems.org'</span>
+
+<span class="n">ruby</span> <span class="s1">'2.2.0'</span>
+<span class="n">gem</span> <span class="s1">'rails'</span><span class="p">,</span> <span class="s1">'4.1.4'</span> <span class="c1"># rails-api has some incompatibilities with 4.2</span>
+<span class="n">gem</span> <span class="s1">'rails-api'</span><span class="p">,</span> <span class="s1">'~&gt; 0.3.1'</span>
+
+<span class="c1"># For versioning our API we will use:</span>
+<span class="n">gem</span> <span class="s1">'api-versions'</span><span class="p">,</span> <span class="s1">'~&gt; 1.2.0'</span>
+
+<span class="c1"># Use sqlite3 as the ActiveRecord database b/c this is an example app</span>
+<span class="n">gem</span> <span class="s1">'sqlite3'</span><span class="p">,</span> <span class="s1">'~&gt; 1.3.9'</span>
+
+<span class="c1"># To use ActiveModel :has_secure_password</span>
+<span class="n">gem</span> <span class="s1">'bcrypt'</span><span class="p">,</span> <span class="s1">'~&gt; 3.1.2'</span>
+
+<span class="c1"># To use Jbuilder templates for JSON</span>
+<span class="n">gem</span> <span class="s1">'jbuilder'</span><span class="p">,</span> <span class="s1">'~&gt; 2.1.3'</span>
+<span class="n">gem</span> <span class="s1">'jbuilder_cache_multi'</span><span class="p">,</span> <span class="s1">'~&gt; 0.0.2'</span>
+
+<span class="c1"># Use Puma for the webserver</span>
+<span class="n">gem</span> <span class="s1">'puma'</span><span class="p">,</span> <span class="s1">'~&gt; 2.9.0'</span>
+
+<span class="c1"># For created unique string IDs</span>
+<span class="n">gem</span> <span class="s1">'bson'</span><span class="p">,</span> <span class="s1">'~&gt; 2.2.4'</span>
+</code></pre>
+
+<p>Run Bundler to install all of the gems:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>bundle
+</code></pre>
+
+<p>We also need to set up the routing for the <a href="https://github.com/EDMC/api-versions">api-versions</a> gem that we have included in the <code>Gemfile</code>. This step is not necessary, but it is generally a very good idea, so we will do it here.</p>
+<pre class="highlight ruby"><code><span class="c1"># config/routes.rb</span>
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="n">api</span> <span class="ss">vendor_string: </span><span class="s2">"crud_api"</span><span class="p">,</span> <span class="ss">default_version: </span><span class="mi">1</span><span class="p">,</span> <span class="ss">defaults: </span><span class="p">{</span> <span class="ss">format: :json</span> <span class="p">}</span> <span class="k">do</span>
+    <span class="n">version</span> <span class="mi">1</span> <span class="k">do</span>
+      <span class="n">cache</span> <span class="ss">as: </span><span class="s1">'v1'</span> <span class="k">do</span>
+        <span class="c1"># Our resources will go here.</span>
+      <span class="k">end</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>In order to use this routing as we have defined it, clients just have to set the <code>Accept</code> header as <code>application/vnd.crud_api+json;version=1</code>. If no version is specified, the default version will be assumed. All resources will be available at <code>/api/:resource/:action</code>.</p>
+
+<p>When you are ready to bump your API to the next version number, the <code>api-versions</code> gem provides a Rails generator called <code>api_versions:bump</code>, which will create all the necessary controller files for you.</p>
+
+<p>If you would like to change the path to the API, i.e., remove the <code>api/</code> url prefix, we can override it like so:</p>
+<pre class="highlight ruby"><code><span class="n">api</span> <span class="ss">vendor_string: </span><span class="s1">'crud_api'</span><span class="p">,</span> <span class="ss">default_version: </span><span class="mi">1</span><span class="p">,</span> <span class="ss">path: </span><span class="s1">''</span> <span class="k">do</span>
+  <span class="n">version</span> <span class="mi">1</span> <span class="k">do</span>
+    <span class="n">cache</span> <span class="ss">as: </span><span class="s1">'v1'</span> <span class="k">do</span>
+      <span class="n">resources</span> <span class="ss">:foo</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+
+<h2>Our First Resource</h2>
+
+<hr>
+
+<p>Now that we have some basic configurations out of the way, we are able to create our first resource.</p>
+
+<p>Open up your terminal, and inside the <code>crud_example</code> directory, run the following:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>rails generate model product
+</code></pre>
+
+<p>If you get an error, you may need to open up <code>config/application.rb</code> and comment out the following line:</p>
+<pre class="highlight ruby"><code><span class="n">config</span><span class="p">.</span><span class="nf">active_record</span><span class="p">.</span><span class="nf">raise_in_transactional_callbacks</span> <span class="o">=</span> <span class="kp">true</span>
+</code></pre>
+
+<p>Run the generate command again and it should work.</p>
+
+<p>Open the file created in the <code>db/migrate</code> directory, it should be something along the lines of <code>20150224025423_create_products</code>.</p>
+<pre class="highlight ruby"><code><span class="c1"># db/migrate/20150224025423_create_products</span>
+<span class="k">class</span> <span class="nc">CreateProducts</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Migration</span>
+  <span class="k">def</span> <span class="nf">change</span>
+    <span class="n">create_table</span> <span class="ss">:products</span> <span class="k">do</span> <span class="o">|</span><span class="n">t</span><span class="o">|</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">string</span>  <span class="ss">:hashed_id</span><span class="p">,</span>    <span class="ss">index: </span><span class="kp">true</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">string</span>  <span class="ss">:name</span><span class="p">,</span>         <span class="ss">index: </span><span class="kp">true</span><span class="p">,</span> <span class="ss">null: </span><span class="kp">false</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">text</span>    <span class="ss">:description</span><span class="p">,</span>  <span class="ss">null: </span><span class="kp">false</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">float</span>   <span class="ss">:price</span><span class="p">,</span>        <span class="ss">index: </span><span class="kp">true</span><span class="p">,</span> <span class="ss">null: </span><span class="kp">false</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">boolean</span> <span class="ss">:deleted</span><span class="p">,</span>      <span class="ss">default: </span><span class="kp">false</span>
+      <span class="n">t</span><span class="p">.</span><span class="nf">boolean</span> <span class="ss">:discontinued</span><span class="p">,</span> <span class="ss">default: </span><span class="kp">false</span>
+
+      <span class="n">t</span><span class="p">.</span><span class="nf">timestamps</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>Run <code>rake db:migrate</code> to migrate the database.</p>
+
+<p>You may be wondering why we added a field for <code>:hashed_id</code>. We want to use pseudo-random string identifiers rather than sequential integer identifiers so that outsiders will not be able to guess how many objects of each type exists in our system, nor will they be able to randomly guess identifiers with much success.</p>
+
+<p>The best way to generate this <code>:hashed_id</code> is with the <code>bson</code> gem and an <code>ActiveSupport::Concern</code>. Concerns are a great way to organize code to be shared among multiple <code>models</code>. Create the following file:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/models/concerns/hashed.rb</span>
+<span class="nb">require</span> <span class="s1">'bson'</span>
+
+<span class="k">module</span> <span class="nn">Hashed</span>
+  <span class="kp">extend</span> <span class="no">ActiveSupport</span><span class="o">::</span><span class="no">Concern</span>
+
+  <span class="n">included</span> <span class="k">do</span>
+    <span class="n">before_create</span> <span class="ss">:create_hashed_id</span>
+  <span class="k">end</span>
+
+  <span class="k">def</span> <span class="nf">create_hashed_id</span>
+    <span class="nb">self</span><span class="p">.</span><span class="nf">hashed_id</span> <span class="o">=</span> <span class="p">(</span><span class="no">BSON</span><span class="o">::</span><span class="no">ObjectId</span><span class="p">.</span><span class="nf">new</span><span class="p">).</span><span class="nf">to_s</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>Now, we can include our concern in our <code>Product</code> model:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/models/product.rb</span>
+<span class="k">class</span> <span class="nc">Product</span> <span class="o">&lt;</span> <span class="no">ActiveRecord</span><span class="o">::</span><span class="no">Base</span>
+  <span class="kp">include</span> <span class="no">Hashed</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>Now when <code>Products</code> are created, a <code>:hashed_id</code> will be generated and set for us.</p>
+
+<p>Fire up the Rails console to test it out:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>rails console
+2.2.0 :001 &gt; Product.create<span class="o">(</span>name: <span class="s2">"Lincoln Logs"</span>, description: <span class="s2">"Lincoln Logs rock!"</span>, price: 19.99<span class="o">)</span>
+   <span class="o">(</span>0.1ms<span class="o">)</span>  begin transaction
+  SQL <span class="o">(</span>0.7ms<span class="o">)</span>  INSERT INTO <span class="s2">"products"</span> <span class="o">(</span><span class="s2">"created_at"</span>, <span class="s2">"description"</span>, <span class="s2">"hashed_id"</span>, <span class="s2">"name"</span>, <span class="s2">"price"</span>, <span class="s2">"updated_at"</span><span class="o">)</span> VALUES <span class="o">(</span>?, ?, ?, ?, ?, ?<span class="o">)</span>  <span class="o">[[</span><span class="s2">"created_at"</span>, <span class="s2">"2015-02-24 03:21:58.898486"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"description"</span>, <span class="s2">"Lincoln Logs rock!"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"hashed_id"</span>, <span class="s2">"54ebee56434a4d3414000000"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"name"</span>, <span class="s2">"Lincoln Logs"</span><span class="o">]</span>, <span class="o">[</span><span class="s2">"price"</span>, 19.99], <span class="o">[</span><span class="s2">"updated_at"</span>, <span class="s2">"2015-02-24 03:21:58.898486"</span><span class="o">]]</span>
+   <span class="o">(</span>2.8ms<span class="o">)</span>  commit transaction
+ <span class="o">=</span>&gt; <span class="c">#&lt;Product id: 1, hashed_id: "54ebee56434a4d3414000000", name: "Lincoln Logs", description: "Lincoln Logs rock!", price: 19.99, discontinued: false, deleted: false, created_at: "2015-02-24 03:21:58", updated_at: "2015-02-24 03:21:58"&gt; </span>
+2.2.0 :002 &gt; Product.first.hashed_id
+  Product Load <span class="o">(</span>0.5ms<span class="o">)</span>  SELECT  <span class="s2">"products"</span>.<span class="k">*</span> FROM <span class="s2">"products"</span>   ORDER BY <span class="s2">"products"</span>.<span class="s2">"id"</span> ASC LIMIT 1
+ <span class="o">=</span>&gt; <span class="s2">"54ebee56434a4d3414000000"</span> 
+</code></pre>
+
+<p>Our first model is complete enough to use, so now we need a controller to be able to access it. Instead of writing a controller from scratch each time we want to add a new resource to our API, we are instead going to define sane default behaviors in our <code>ApplicationController</code>, from which all of our resource controllers will inherit. We will also add some hooks to allow for customization, so we don&rsquo;t have to write a brand new controller when our desired action is slightly different from the default.</p>
+<pre class="highlight ruby"><code><span class="c1"># app/controllers/application_controller.rb</span>
+<span class="k">class</span> <span class="nc">ApplicationController</span> <span class="o">&lt;</span> <span class="no">ActionController</span><span class="o">::</span><span class="no">API</span>
+  <span class="c1"># includes Rails modules we want that rails-api doesn't provide</span>
+  <span class="kp">include</span> <span class="no">ActionController</span><span class="o">::</span><span class="no">HttpAuthentication</span><span class="o">::</span><span class="no">Basic</span><span class="o">::</span><span class="no">ControllerMethods</span>
+  <span class="kp">include</span> <span class="no">ActionController</span><span class="o">::</span><span class="no">MimeResponds</span>
+  <span class="kp">include</span> <span class="no">ActionController</span><span class="o">::</span><span class="no">StrongParameters</span>
+  <span class="kp">include</span> <span class="no">ActionView</span><span class="o">::</span><span class="no">Layouts</span>
+
+  <span class="c1">## Default CRUD methods</span>
+
+  <span class="c1"># GET /api/:resource</span>
+  <span class="k">def</span> <span class="nf">index</span>
+    <span class="vi">@resources</span> <span class="o">=</span> <span class="n">resource</span><span class="p">.</span><span class="nf">all</span>
+    <span class="n">render</span> <span class="ss">:index</span><span class="p">,</span> <span class="ss">status: :ok</span>
+  <span class="k">end</span>
+
+  <span class="c1"># GET /api/:resource/:id</span>
+  <span class="k">def</span> <span class="nf">show</span>
+    <span class="vi">@resource</span> <span class="o">=</span> <span class="n">set_resource</span>
+
+    <span class="k">if</span> <span class="vi">@resource</span>
+      <span class="n">render</span> <span class="ss">:show</span><span class="p">,</span> <span class="ss">status: :ok</span>
+    <span class="k">else</span>
+      <span class="n">render</span> <span class="s2">"errors/not_found"</span><span class="p">,</span> <span class="ss">status: :not_found</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="c1"># POST /api/:resource</span>
+  <span class="k">def</span> <span class="nf">create</span>
+    <span class="vi">@resource</span> <span class="o">=</span> <span class="n">resource</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">resource_params</span><span class="p">)</span>
+
+    <span class="n">before_create_hook</span>
+    <span class="k">if</span> <span class="vi">@resource</span><span class="p">.</span><span class="nf">save</span>
+      <span class="n">after_create_hook</span>
+      <span class="n">render</span> <span class="ss">:show</span><span class="p">,</span> <span class="ss">status: :created</span>
+    <span class="k">else</span>
+      <span class="n">render</span> <span class="s2">"errors/invalid_parameters"</span><span class="p">,</span> <span class="ss">status: :bad_request</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="c1"># PUT   /api/:resource/:id</span>
+  <span class="c1"># PATCH /api/:resource/:id</span>
+  <span class="k">def</span> <span class="nf">update</span>
+    <span class="vi">@resource</span> <span class="o">=</span> <span class="n">set_resource</span>
+
+    <span class="k">if</span> <span class="vi">@resource</span><span class="p">.</span><span class="nf">update_attributes</span><span class="p">(</span><span class="n">resource_params</span><span class="p">)</span>
+      <span class="n">render</span> <span class="ss">:show</span><span class="p">,</span> <span class="ss">status: :ok</span>
+    <span class="k">else</span>
+      <span class="k">if</span> <span class="vi">@resource</span>
+        <span class="n">render</span> <span class="s2">"errors/invalid_parameters"</span><span class="p">,</span>
+               <span class="ss">status: :bad_request</span>
+      <span class="k">else</span>
+        <span class="n">render</span> <span class="s2">"errors/not_found"</span><span class="p">,</span>
+               <span class="ss">status: :not_found</span>
+      <span class="k">end</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="c1"># DELETE /api/:resource/:id</span>
+  <span class="k">def</span> <span class="nf">destroy</span>
+    <span class="vi">@resource</span> <span class="o">=</span> <span class="n">set_resource</span>
+
+    <span class="k">if</span> <span class="vi">@resource</span>
+      <span class="n">before_destroy_hook</span>
+      <span class="vi">@resource</span><span class="p">.</span><span class="nf">deleted</span> <span class="o">=</span> <span class="kp">true</span>
+      <span class="vi">@resource</span><span class="p">.</span><span class="nf">save</span>
+      <span class="n">after_destroy_hook</span>
+      <span class="n">render</span> <span class="ss">:show</span><span class="p">,</span> <span class="ss">status: :ok</span>
+    <span class="k">else</span>
+      <span class="n">render</span> <span class="s2">"errors/not_found"</span><span class="p">,</span>
+             <span class="ss">status: :not_found</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="kp">protected</span>
+
+    <span class="c1"># Get the class of the resource with which we are dealing.</span>
+    <span class="k">def</span> <span class="nf">resource</span>
+      <span class="nb">self</span><span class="p">.</span><span class="nf">class</span><span class="p">.</span><span class="nf">to_s</span><span class="p">.</span><span class="nf">split</span><span class="p">(</span><span class="s1">'::'</span><span class="p">)</span>
+          <span class="p">.</span><span class="nf">last</span><span class="p">.</span><span class="nf">split</span><span class="p">(</span><span class="s1">'sController'</span><span class="p">)</span>
+          <span class="p">.</span><span class="nf">first</span><span class="p">.</span><span class="nf">constantize</span>
+    <span class="k">end</span>
+
+    <span class="c1"># Finds the desired Resource instance by :id</span>
+    <span class="k">def</span> <span class="nf">set_resource</span>
+      <span class="n">resource</span><span class="p">.</span><span class="nf">find_by_hashed_id</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="ss">:id</span><span class="p">])</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="nf">resource_params</span>
+      <span class="k">raise</span> <span class="s2">"Must implement resource_params method"</span>
+    <span class="k">end</span>
+
+    <span class="c1"># Customization hook methods.</span>
+
+    <span class="k">def</span> <span class="nf">before_create_hook</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="nf">after_create_hook</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="nf">before_destroy_hook</span>
+    <span class="k">end</span>
+
+    <span class="k">def</span> <span class="nf">after_destroy_hook</span>
+    <span class="k">end</span>
+
+    <span class="c1"># You can add more hooks if desired.</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>Now for the <code>ProductsController</code>:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/controllers/api/v1/products_controller.rb</span>
+<span class="k">class</span> <span class="nc">Api</span><span class="o">::</span><span class="no">V1</span><span class="o">::</span><span class="no">ProductsController</span> <span class="o">&lt;</span> <span class="no">ApplicationController</span>
+  <span class="kp">private</span>
+
+    <span class="k">def</span> <span class="nf">resource_params</span>
+      <span class="n">params</span><span class="p">.</span><span class="nf">permit</span><span class="p">(</span><span class="ss">:name</span><span class="p">,</span> <span class="ss">:description</span><span class="p">,</span> <span class="ss">:price</span><span class="p">)</span>
+    <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>The <code>ProductsController</code> is absolutely tiny, and this is because all of the logic is contained in the <code>ApplicationController</code> super class. Essentially, to create a new resource, all we have to do is create the appropriately named file, specify the <code>resource_params</code>, and add the resource to our routes file. We then have to create new views for the resource, but we can take care of that annoyance in a later post.</p>
+
+<p>Our updated routes file:</p>
+<pre class="highlight ruby"><code><span class="c1"># config/routes.rb</span>
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="n">api</span> <span class="ss">vendor_string: </span><span class="s2">"crud_api"</span><span class="p">,</span> <span class="ss">default_version: </span><span class="mi">1</span><span class="p">,</span> <span class="ss">defaults: </span><span class="p">{</span> <span class="ss">format: :json</span> <span class="p">}</span> <span class="k">do</span>
+    <span class="n">version</span> <span class="mi">1</span> <span class="k">do</span>
+      <span class="n">cache</span> <span class="ss">as: </span><span class="s1">'v1'</span> <span class="k">do</span>
+        <span class="n">resources</span> <span class="ss">:products</span><span class="p">,</span> <span class="ss">except: </span><span class="p">[</span><span class="ss">:new</span><span class="p">,</span> <span class="ss">:edit</span><span class="p">]</span>
+      <span class="k">end</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre>
+
+<p>We still need to create some views before we are able to use our API. We are going to use <code>Jbuilder</code> for these. You may also use <code>ActiveModelSerializers</code>, but I like the <code>Jbuilder</code> DSL, so that is what I have chosen to use here.</p>
+
+<p>We need <code>index</code> and <code>show</code> views for our <code>ProductsController</code>, and <code>errors/not_found</code>, and <code>errors/invalid_parameters</code> views to return on errors. We will also use a product partial to simplify our views.</p>
+
+<p>The <code>index</code> view:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/views/api/v1/products/index.json.jbuilder</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">array!</span> <span class="vi">@resources</span> <span class="k">do</span> <span class="o">|</span><span class="n">product</span><span class="o">|</span>
+  <span class="n">json</span><span class="p">.</span><span class="nf">partial!</span> <span class="s1">'product'</span><span class="p">,</span> <span class="ss">product: </span><span class="n">product</span> 
+<span class="k">end</span>
+</code></pre>
+
+<p>The <code>show</code> view:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/views/api/v1/products/show.json.jbuilder</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">partial!</span> <span class="s1">'product'</span><span class="p">,</span> <span class="ss">product: </span><span class="vi">@resource</span>
+</code></pre>
+
+<p>The partial:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/views/api/v1/products/_product.json.jbuilder</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">id</span> <span class="n">product</span><span class="p">.</span><span class="nf">hashed_id</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">extract!</span> <span class="n">product</span><span class="p">,</span> <span class="ss">:name</span><span class="p">,</span> <span class="ss">:description</span><span class="p">,</span> <span class="ss">:price</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">created_at</span> <span class="n">product</span><span class="p">.</span><span class="nf">created_at</span><span class="p">.</span><span class="nf">utc</span><span class="p">.</span><span class="nf">to_i</span> <span class="k">unless</span> <span class="n">product</span><span class="p">.</span><span class="nf">created_at</span><span class="p">.</span><span class="nf">nil?</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">created_at</span> <span class="n">product</span><span class="p">.</span><span class="nf">updated_at</span><span class="p">.</span><span class="nf">utc</span><span class="p">.</span><span class="nf">to_i</span> <span class="k">unless</span> <span class="n">product</span><span class="p">.</span><span class="nf">updated_at</span><span class="p">.</span><span class="nf">nil?</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">deleted</span> <span class="kp">true</span> <span class="k">if</span> <span class="n">product</span><span class="p">.</span><span class="nf">deleted</span>
+</code></pre>
+
+<p>The <code>errors/not_found</code> view:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/views/errors/not_found.json.jbuilder</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">message</span> <span class="s2">"</span><span class="si">#{</span><span class="k">class</span><span class="p">.</span><span class="nf">to_s</span><span class="si">}</span><span class="s2"> with id </span><span class="si">#{</span><span class="n">hashed_id</span><span class="si">}</span><span class="s2"> could not be found."</span>
+</code></pre>
+
+<p>The <code>errors/invalid_parameters</code> view:</p>
+<pre class="highlight ruby"><code><span class="c1"># app/views/errors/invalid_parameters.json.jbuilder</span>
+<span class="n">json</span><span class="p">.</span><span class="nf">message</span> <span class="s2">"One or more required parameters are invalid"</span>
+</code></pre>
+
+<h2>Making Our First Request</h2>
+
+<hr>
+
+<p>Now we are finally ready to begin using our very simple Rails API.</p>
+
+<p>Start up the application:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>rails server
+</code></pre>
+
+<p>Our request:</p>
+<pre class="highlight shell"><code><span class="gp">$ </span>curl -i -H <span class="s2">"Accept: application/vnd.crud_api+json;version=1"</span> localhost:3000/api/products
+HTTP/1.1 200 OK
+X-Frame-Options: SAMEORIGIN
+X-XSS-Protection: 1; <span class="nv">mode</span><span class="o">=</span>block
+X-Content-Type-Options: nosniff
+Content-Type: application/json; <span class="nv">charset</span><span class="o">=</span>utf-8
+ETag: <span class="s2">"121aa39832d9fd51dff821f9f767ae01"</span>
+Cache-Control: max-age<span class="o">=</span>0, private, must-revalidate
+X-Request-Id: f41ea667-3f85-45ed-9236-83e33b29169b
+X-Runtime: 0.042122
+Transfer-Encoding: chunked
+
+<span class="o">[{</span><span class="s2">"id"</span>:<span class="s2">"54ebfbdb434a4d345e000000"</span>,<span class="s2">"name"</span>:<span class="s2">"Lincoln Logs"</span>,<span class="s2">"description"</span>:<span class="s2">"Lincoln Logs rock!"</span>,<span class="s2">"price"</span>:19.99,<span class="s2">"created_at"</span>:1424751579<span class="o">}]</span>
+</code></pre>
+
+<p>It works! The code for our API so far can be found on <a href="https://github.com/connorjacobsen/crud_example">Github</a>. Check back for Part 2, where we will cover two methods of Authentication, a User resource, using environment variables in our application, and more.</p>
+
+    </div>
+  </body>
+</html>
